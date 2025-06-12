@@ -1,0 +1,90 @@
+org: rolandodiaz
+service: api-productos
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 1024
+  timeout: 30
+  region: us-east-1
+  iam:
+    role: arn:aws:iam::409362080365:role/LabRole
+  environment:
+    TABLE_NAME: ${sls:stage}-t_productos
+    JWT_SECRET: mi-super-secreto-jwt-2025
+
+functions:
+  listar-productos:
+    handler: main.listarProductos
+    events:
+      - http:
+          path: /productos
+          method: get
+          cors: true
+          integration: lambda
+  
+  crear-producto:
+    handler: main.crearProducto
+    events:
+      - http:
+          path: /productos
+          method: post
+          cors: true
+          integration: lambda
+  
+  buscar-producto:
+    handler: main.buscarProducto
+    events:
+      - http:
+          path: /productos/{codigo}
+          method: get
+          cors: true
+          integration: lambda
+  
+  modificar-producto:
+    handler: main.modificarProducto
+    events:
+      - http:
+          path: /productos/{codigo}
+          method: put
+          cors: true
+          integration: lambda
+  
+  eliminar-producto:
+    handler: main.eliminarProducto
+    events:
+      - http:
+          path: /productos/{codigo}
+          method: delete
+          cors: true
+          integration: lambda
+
+resources:
+  Resources:
+    TablaProductos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_NAME}
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: codigo
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: codigo
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        GlobalSecondaryIndexes:
+          - IndexName: tenant_id-index
+            KeySchema:
+              - AttributeName: tenant_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
