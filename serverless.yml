@@ -135,3 +135,4 @@ resources:
               Action:
                 - s3:GetObject
               Resource: !Sub "${BucketImagenes}/*"
+      DependsOn: BucketImagenes
