@@ -120,6 +120,39 @@ const detectarTipoImagen = (base64String) => {
     return null;
 };
 
+// Función para validar y procesar imagen base64
+const procesarImagenBase64 = (base64String) => {
+    try {
+        // Limpiar el string base64 de posibles headers
+        const cleanBase64 = base64String.replace(/^data:image\/\w+;base64,/, '');
+        
+        // Validar que sea base64 válido
+        if (!/^[A-Za-z0-9+/=]+$/.test(cleanBase64)) {
+            throw new Error('Formato base64 inválido');
+        }
+        
+        // Detectar tipo de imagen
+        const tipoImagen = detectarTipoImagen(cleanBase64);
+        if (!tipoImagen) {
+            throw new Error('Formato de imagen no soportado. Solo JPG, PNG, GIF, WEBP');
+        }
+        
+        // Convertir a buffer y validar tamaño
+        const imageBuffer = Buffer.from(cleanBase64, 'base64');
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (imageBuffer.length > maxSize) {
+            throw new Error('Imagen muy grande. Máximo 5MB');
+        }
+        
+        return {
+            buffer: imageBuffer,
+            tipo: tipoImagen
+        };
+    } catch (error) {
+        throw new Error(`Error procesando imagen: ${error.message}`);
+    }
+};
+
 // Subir imagen a S3
 export async function subirImagen(event, context) {
     try {
@@ -305,17 +338,10 @@ export async function crearProducto(event, context) {
         const tenantId = tokenValidation.usuario.tenant_id;
         
         let body;
-        let contentType = event.headers['Content-Type'] || event.headers['content-type'];
-        
-        if (contentType && contentType.includes('multipart/form-data')) {
-            // Procesar form-data
-            body = procesarFormData(event.body);
-        } else {
-            try {
-                body = JSON.parse(event.body);
-            } catch (e) {
-                return lambdaResponse(400, { error: 'Formato de datos inválido. Use multipart/form-data o JSON' });
-            }
+        try {
+            body = JSON.parse(event.body);
+        } catch (e) {
+            return lambdaResponse(400, { error: 'JSON inválido' });
         }
         
         // Validar campos requeridos
@@ -337,39 +363,25 @@ export async function crearProducto(event, context) {
         
         let imagenUrl = '';
         
-        // Si se proporciona imagen en form-data
+        // Si se proporciona imagen en base64
         if (body.imagen) {
             try {
-                // La imagen viene en base64 desde el form-data
-                const tipoImagen = detectarTipoImagen(body.imagen);
-                if (!tipoImagen) {
-                    return lambdaResponse(400, { error: 'Formato de imagen no soportado' });
-                }
-                
-                const imageBuffer = Buffer.from(body.imagen, 'base64');
-                
-                // Validar tamaño
-                const maxSize = 5 * 1024 * 1024; // 5MB
-                if (imageBuffer.length > maxSize) {
-                    return lambdaResponse(400, { error: 'Imagen muy grande. Máximo 5MB' });
-                }
-                
-                const nombreArchivo = generarNombreArchivo(tenantId, codigo, tipoImagen.ext);
+                const imagenProcesada = procesarImagenBase64(body.imagen);
+                const nombreArchivo = generarNombreArchivo(tenantId, codigo, imagenProcesada.tipo.ext);
                 
                 const uploadParams = {
                     Bucket: bucketName,
                     Key: nombreArchivo,
-                    Body: imageBuffer,
-                    ContentType: tipoImagen.mime,
+                    Body: imagenProcesada.buffer,
+                    ContentType: imagenProcesada.tipo.mime,
                     ACL: 'public-read'
                 };
                 
                 const uploadResult = await s3.upload(uploadParams).promise();
                 imagenUrl = uploadResult.Location;
                 
-            } catch (uploadError) {
-                console.error('Error subiendo imagen:', uploadError);
-                return lambdaResponse(400, { error: 'Error procesando imagen' });
+            } catch (error) {
+                return lambdaResponse(400, { error: error.message });
             }
         } else if (body.imagen_url) {
             // Si se proporciona URL directamente
