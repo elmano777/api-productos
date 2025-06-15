@@ -82,6 +82,27 @@ const detectarTipoImagen = (base64String) => {
     return null;
 };
 
+// Función para procesar form-data
+const procesarFormData = (body) => {
+    const boundary = body.split('\r\n')[0];
+    const parts = body.split(boundary);
+    const result = {};
+    
+    for (const part of parts) {
+        if (part.includes('Content-Disposition: form-data')) {
+            const nameMatch = part.match(/name="([^"]+)"/);
+            if (nameMatch) {
+                const name = nameMatch[1];
+                const value = part.split('\r\n\r\n')[1]?.split('\r\n')[0];
+                if (value) {
+                    result[name] = value;
+                }
+            }
+        }
+    }
+    return result;
+};
+
 // Subir imagen a S3
 export async function subirImagen(event, context) {
     try {
@@ -267,10 +288,17 @@ export async function crearProducto(event, context) {
         const tenantId = tokenValidation.usuario.tenant_id;
         
         let body;
-        try {
-            body = JSON.parse(event.body);
-        } catch (e) {
-            return lambdaResponse(400, { error: 'JSON inválido' });
+        let contentType = event.headers['Content-Type'] || event.headers['content-type'];
+        
+        if (contentType && contentType.includes('multipart/form-data')) {
+            // Procesar form-data
+            body = procesarFormData(event.body);
+        } else {
+            try {
+                body = JSON.parse(event.body);
+            } catch (e) {
+                return lambdaResponse(400, { error: 'Formato de datos inválido. Use multipart/form-data o JSON' });
+            }
         }
         
         // Validar campos requeridos
@@ -292,9 +320,10 @@ export async function crearProducto(event, context) {
         
         let imagenUrl = '';
         
-        // Si se proporciona imagen en base64, subirla a S3
+        // Si se proporciona imagen en form-data
         if (body.imagen) {
             try {
+                // La imagen viene en base64 desde el form-data
                 const tipoImagen = detectarTipoImagen(body.imagen);
                 if (!tipoImagen) {
                     return lambdaResponse(400, { error: 'Formato de imagen no soportado' });
