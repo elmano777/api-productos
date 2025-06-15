@@ -426,8 +426,10 @@ export async function crearProducto(event, context) {
     }
 }
 
-// Buscar producto por código
+// Buscar producto por código - VERSIÓN CORREGIDA
 export async function buscarProducto(event, context) {
+    console.log('Evento completo:', JSON.stringify(event, null, 2)); // Debug
+    
     try {
         // Validar token
         const tokenValidation = validarToken(event);
@@ -436,10 +438,49 @@ export async function buscarProducto(event, context) {
         }
         
         const tenantId = tokenValidation.usuario.tenant_id;
-        const codigo = event.pathParameters?.codigo;
+        
+        // Múltiples formas de obtener el código
+        let codigo = null;
+        
+        // Opción 1: Desde pathParameters
+        if (event.pathParameters && event.pathParameters.codigo) {
+            codigo = event.pathParameters.codigo;
+        }
+        
+        // Opción 2: Desde pathParameters sin optional chaining (fallback)
+        if (!codigo && event.pathParameters) {
+            codigo = event.pathParameters.codigo;
+        }
+        
+        // Opción 3: Desde resource path parsing (backup)
+        if (!codigo && event.resource) {
+            const matches = event.resource.match(/\/productos\/buscar\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 4: Desde requestContext (otro fallback)
+        if (!codigo && event.requestContext && event.requestContext.resourcePath) {
+            const matches = event.requestContext.resourcePath.match(/\/productos\/buscar\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        console.log('Código extraído:', codigo); // Debug
         
         if (!codigo) {
-            return lambdaResponse(400, { error: 'Código de producto requerido' });
+            console.log('PathParameters:', event.pathParameters);
+            console.log('Resource:', event.resource);
+            console.log('RequestContext:', event.requestContext);
+            return lambdaResponse(400, { 
+                error: 'Código de producto requerido',
+                debug: {
+                    pathParameters: event.pathParameters,
+                    resource: event.resource
+                }
+            });
         }
         
         const params = {
@@ -449,6 +490,8 @@ export async function buscarProducto(event, context) {
                 codigo: codigo
             }
         };
+        
+        console.log('Parámetros DynamoDB:', JSON.stringify(params, null, 2)); // Debug
         
         const result = await dynamodb.send(new GetCommand(params));
         
