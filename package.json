@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "API de productos para Inkafarma - Multi-tenant Serverless",
   "main": "productos.js",
+  "type": "module",
   "scripts": {
     "deploy-dev": "serverless deploy --stage dev",
     "deploy-test": "serverless deploy --stage test",
@@ -22,7 +23,8 @@
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "serverless": "^3.38.0"
+    "serverless": "^3.38.0",
+    "serverless-esbuild": "^1.55.1"
   },
   "keywords": [
     "aws",
