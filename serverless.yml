@@ -10,6 +10,7 @@ provider:
     role: arn:aws:iam::409362080365:role/LabRole
   environment:
     TABLE_NAME: ${sls:stage}-t_productos
+    BUCKET_NAME: ${sls:stage}-inkafarma-productos-imagenes
     JWT_SECRET: mi-super-secreto-jwt-2025
 
 functions:
@@ -58,8 +59,27 @@ functions:
           cors: true
           integration: lambda
 
+  subir-imagen:
+    handler: productos.subirImagen
+    events:
+      - http:
+          path: /productos/subir-imagen
+          method: post
+          cors: true
+          integration: lambda
+
+  generar-url-subida:
+    handler: productos.generarUrlSubida
+    events:
+      - http:
+          path: /productos/generar-url-subida
+          method: get
+          cors: true
+          integration: lambda
+
 resources:
   Resources:
+    # Tabla DynamoDB
     TablaProductos:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -77,3 +97,41 @@ resources:
         BillingMode: PAY_PER_REQUEST
         StreamSpecification:
           StreamViewType: NEW_AND_OLD_IMAGES
+
+    # Bucket S3 para imágenes
+    BucketImagenes:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.BUCKET_NAME}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+                - HEAD
+              AllowedOrigins:
+                - "*"
+              MaxAge: 3000
+
+    # Política del bucket para permitir acceso público a las imágenes
+    BucketImagenesPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref BucketImagenes
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action:
+                - s3:GetObject
+              Resource: !Sub "${BucketImagenes}/*"

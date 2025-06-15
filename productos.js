@@ -1,9 +1,11 @@
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDB, S3 } from 'aws-sdk';
 import { verify } from 'jsonwebtoken';
 
-// Cliente DynamoDB
+// Clientes AWS
 const dynamodb = new DynamoDB.DocumentClient();
+const s3 = new S3();
 const tableName = process.env.TABLE_NAME;
+const bucketName = process.env.BUCKET_NAME;
 const jwtSecret = process.env.JWT_SECRET;
 
 // Función helper para respuestas consistentes
@@ -65,6 +67,138 @@ const generarCodigoProducto = () => {
     return `MED-${timestamp}-${random}`.toUpperCase();
 };
 
+// Función para generar nombre único de archivo
+const generarNombreArchivo = (tenantId, codigo, extension) => {
+    const timestamp = Date.now();
+    return `productos/${tenantId}/${codigo}/${timestamp}.${extension}`;
+};
+
+// Função para detectar tipo de archivo por su contenido
+const detectarTipoImagen = (base64String) => {
+    if (base64String.startsWith('/9j/')) return { ext: 'jpg', mime: 'image/jpeg' };
+    if (base64String.startsWith('iVBORw0KGgo')) return { ext: 'png', mime: 'image/png' };
+    if (base64String.startsWith('R0lGODlh')) return { ext: 'gif', mime: 'image/gif' };
+    if (base64String.startsWith('UklGR')) return { ext: 'webp', mime: 'image/webp' };
+    return null;
+};
+
+// Subir imagen a S3
+export async function subirImagen(event, context) {
+    try {
+        // Validar token
+        const tokenValidation = validarToken(event);
+        if (!tokenValidation.valid) {
+            return lambdaResponse(401, { error: tokenValidation.error });
+        }
+        
+        const tenantId = tokenValidation.usuario.tenant_id;
+        
+        let body;
+        try {
+            body = JSON.parse(event.body);
+        } catch (e) {
+            return lambdaResponse(400, { error: 'JSON inválido' });
+        }
+        
+        // Validar campos requeridos
+        if (!body.imagen || !body.codigo_producto) {
+            return lambdaResponse(400, { error: 'Campos requeridos: imagen (base64), codigo_producto' });
+        }
+        
+        // Detectar tipo de imagen
+        const tipoImagen = detectarTipoImagen(body.imagen);
+        if (!tipoImagen) {
+            return lambdaResponse(400, { error: 'Formato de imagen no soportado. Solo JPG, PNG, GIF, WEBP' });
+        }
+        
+        // Convertir base64 a buffer
+        let imageBuffer;
+        try {
+            imageBuffer = Buffer.from(body.imagen, 'base64');
+        } catch (e) {
+            return lambdaResponse(400, { error: 'Imagen base64 inválida' });
+        }
+        
+        // Validar tamaño (máximo 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (imageBuffer.length > maxSize) {
+            return lambdaResponse(400, { error: 'Imagen muy grande. Máximo 5MB' });
+        }
+        
+        // Generar nombre único del archivo
+        const nombreArchivo = generarNombreArchivo(tenantId, body.codigo_producto, tipoImagen.ext);
+        
+        // Subir a S3
+        const uploadParams = {
+            Bucket: bucketName,
+            Key: nombreArchivo,
+            Body: imageBuffer,
+            ContentType: tipoImagen.mime,
+            ACL: 'public-read' // Para que sea accesible públicamente
+        };
+        
+        const uploadResult = await s3.upload(uploadParams).promise();
+        
+        return lambdaResponse(200, {
+            message: 'Imagen subida exitosamente',
+            imagen_url: uploadResult.Location,
+            key: nombreArchivo
+        });
+        
+    } catch (error) {
+        console.error('Error subiendo imagen:', error);
+        return lambdaResponse(500, { error: 'Error interno del servidor' });
+    }
+}
+
+// Generar URL presignada para subida directa (alternativa)
+export async function generarUrlSubida(event, context) {
+    try {
+        // Validar token
+        const tokenValidation = validarToken(event);
+        if (!tokenValidation.valid) {
+            return lambdaResponse(401, { error: tokenValidation.error });
+        }
+        
+        const tenantId = tokenValidation.usuario.tenant_id;
+        const queryParams = event.queryStringParameters || {};
+        
+        if (!queryParams.codigo_producto || !queryParams.tipo_archivo) {
+            return lambdaResponse(400, { error: 'Parámetros requeridos: codigo_producto, tipo_archivo' });
+        }
+        
+        const tiposPermitidos = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const tipoArchivo = queryParams.tipo_archivo.toLowerCase();
+        
+        if (!tiposPermitidos.includes(tipoArchivo)) {
+            return lambdaResponse(400, { error: 'Tipo de archivo no permitido' });
+        }
+        
+        const nombreArchivo = generarNombreArchivo(tenantId, queryParams.codigo_producto, tipoArchivo);
+        
+        // Generar URL presignada (válida por 10 minutos)
+        const signedUrl = s3.getSignedUrl('putObject', {
+            Bucket: bucketName,
+            Key: nombreArchivo,
+            ContentType: `image/${tipoArchivo === 'jpg' ? 'jpeg' : tipoArchivo}`,
+            ACL: 'public-read',
+            Expires: 600 // 10 minutos
+        });
+        
+        const publicUrl = `https://${bucketName}.s3.amazonaws.com/${nombreArchivo}`;
+        
+        return lambdaResponse(200, {
+            upload_url: signedUrl,
+            public_url: publicUrl,
+            expires_in: 600
+        });
+        
+    } catch (error) {
+        console.error('Error generando URL presignada:', error);
+        return lambdaResponse(500, { error: 'Error interno del servidor' });
+    }
+}
+
 // Listar productos con paginación
 export async function listarProductos(event, context) {
     try {
@@ -121,7 +255,7 @@ export async function listarProductos(event, context) {
     }
 }
 
-// Crear producto
+// Crear producto (puede incluir imagen)
 export async function crearProducto(event, context) {
     try {
         // Validar token
@@ -156,13 +290,53 @@ export async function crearProducto(event, context) {
         const codigo = generarCodigoProducto();
         const fechaCreacion = new Date().toISOString();
         
+        let imagenUrl = '';
+        
+        // Si se proporciona imagen en base64, subirla a S3
+        if (body.imagen) {
+            try {
+                const tipoImagen = detectarTipoImagen(body.imagen);
+                if (!tipoImagen) {
+                    return lambdaResponse(400, { error: 'Formato de imagen no soportado' });
+                }
+                
+                const imageBuffer = Buffer.from(body.imagen, 'base64');
+                
+                // Validar tamaño
+                const maxSize = 5 * 1024 * 1024; // 5MB
+                if (imageBuffer.length > maxSize) {
+                    return lambdaResponse(400, { error: 'Imagen muy grande. Máximo 5MB' });
+                }
+                
+                const nombreArchivo = generarNombreArchivo(tenantId, codigo, tipoImagen.ext);
+                
+                const uploadParams = {
+                    Bucket: bucketName,
+                    Key: nombreArchivo,
+                    Body: imageBuffer,
+                    ContentType: tipoImagen.mime,
+                    ACL: 'public-read'
+                };
+                
+                const uploadResult = await s3.upload(uploadParams).promise();
+                imagenUrl = uploadResult.Location;
+                
+            } catch (uploadError) {
+                console.error('Error subiendo imagen:', uploadError);
+                return lambdaResponse(400, { error: 'Error procesando imagen' });
+            }
+        } else if (body.imagen_url) {
+            // Si se proporciona URL directamente
+            imagenUrl = body.imagen_url;
+        }
+        
         const producto = {
             tenant_id: tenantId,
             codigo: codigo,
             nombre: body.nombre.trim(),
             precio: precio,
             descripcion: body.descripcion.trim(),
-            imagen_url: body.imagen_url || '',
+            imagen_url: imagenUrl,
             fecha_creacion: fechaCreacion,
             fecha_modificacion: fechaCreacion,
             activo: true
@@ -226,7 +400,7 @@ export async function buscarProducto(event, context) {
     }
 }
 
-// Modificar producto
+// Modificar producto (puede incluir nueva imagen)
 export async function modificarProducto(event, context) {
     try {
         // Validar token
@@ -270,11 +444,60 @@ export async function modificarProducto(event, context) {
         };
         let expressionAttributeNames = {};
         
-        // Campos que se pueden actualizar
+        // Manejar imagen si se proporciona
+        if (body.imagen) {
+            try {
+                const tipoImagen = detectarTipoImagen(body.imagen);
+                if (!tipoImagen) {
+                    return lambdaResponse(400, { error: 'Formato de imagen no soportado' });
+                }
+                
+                const imageBuffer = Buffer.from(body.imagen, 'base64');
+                
+                // Validar tamaño
+                const maxSize = 5 * 1024 * 1024; // 5MB
+                if (imageBuffer.length > maxSize) {
+                    return lambdaResponse(400, { error: 'Imagen muy grande. Máximo 5MB' });
+                }
+                
+                // Eliminar imagen anterior si existe
+                if (existingProduct.Item.imagen_url) {
+                    try {
+                        const oldImageKey = existingProduct.Item.imagen_url.split('.com/')[1]; // Extraer key de la URL
+                        if (oldImageKey && oldImageKey.startsWith('productos/')) {
+                            await s3.deleteObject({ Bucket: bucketName, Key: oldImageKey }).promise();
+                        }
+                    } catch (deleteError) {
+                        console.warn('No se pudo eliminar imagen anterior:', deleteError);
+                    }
+                }
+                
+                const nombreArchivo = generarNombreArchivo(tenantId, codigo, tipoImagen.ext);
+                
+                const uploadParams = {
+                    Bucket: bucketName,
+                    Key: nombreArchivo,
+                    Body: imageBuffer,
+                    ContentType: tipoImagen.mime,
+                    ACL: 'public-read'
+                };
+                
+                const uploadResult = await s3.upload(uploadParams).promise();
+                
+                updateExpression += `, imagen_url = :imagen_url`;
+                expressionAttributeValues[':imagen_url'] = uploadResult.Location;
+                
+            } catch (uploadError) {
+                console.error('Error subiendo nueva imagen:', uploadError);
+                return lambdaResponse(400, { error: 'Error procesando imagen' });
+            }
+        }
+        
+        // Campos que se pueden actualizar (además de imagen)
         const updatableFields = ['nombre', 'precio', 'descripcion', 'imagen_url', 'activo'];
         
         for (const field of updatableFields) {
-            if (body[field] !== undefined) {
+            if (body[field] !== undefined && field !== 'imagen_url') { // imagen_url se maneja arriba
                 if (field === 'precio') {
                     const precio = parseFloat(body[field]);
                     if (isNaN(precio) || precio <= 0) {
@@ -306,9 +529,12 @@ export async function modificarProducto(event, context) {
             },
             UpdateExpression: updateExpression,
             ExpressionAttributeValues: expressionAttributeValues,
-            ExpressionAttributeNames: expressionAttributeNames,
             ReturnValues: 'ALL_NEW'
         };
+        
+        if (Object.keys(expressionAttributeNames).length > 0) {
+            updateParams.ExpressionAttributeNames = expressionAttributeNames;
+        }
         
         const result = await dynamodb.update(updateParams).promise();
         
@@ -323,7 +549,7 @@ export async function modificarProducto(event, context) {
     }
 }
 
-// Eliminar producto
+// Eliminar producto (incluye eliminación de imagen)
 export async function eliminarProducto(event, context) {
     try {
         // Validar token
@@ -339,7 +565,7 @@ export async function eliminarProducto(event, context) {
             return lambdaResponse(400, { error: 'Código de producto requerido' });
         }
         
-        // Verificar que el producto existe antes de eliminar
+        // Obtener producto antes de eliminar
         const getParams = {
             TableName: tableName,
             Key: {
@@ -351,6 +577,19 @@ export async function eliminarProducto(event, context) {
         const existingProduct = await dynamodb.get(getParams).promise();
         if (!existingProduct.Item) {
             return lambdaResponse(404, { error: 'Producto no encontrado' });
+        }
+        
+        // Eliminar imagen de S3 si existe
+        if (existingProduct.Item.imagen_url) {
+            try {
+                const imageKey = existingProduct.Item.imagen_url.split('.com/')[1]; // Extraer key de la URL
+                if (imageKey && imageKey.startsWith('productos/')) {
+                    await s3.deleteObject({ Bucket: bucketName, Key: imageKey }).promise();
+                }
+            } catch (deleteError) {
+                console.warn('No se pudo eliminar imagen:', deleteError);
+                // Continuar con la eliminación del producto aunque falle la imagen
+            }
         }
         
         const deleteParams = {

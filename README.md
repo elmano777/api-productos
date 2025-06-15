@@ -12,6 +12,8 @@ Este microservicio maneja la gestión de productos (medicinas) con soporte multi
 - ✅ DynamoDB Streams habilitado
 - ✅ CORS habilitado
 - ✅ Despliegue automatizado con Serverless Framework
+- ✅ Manejo de imágenes con S3
+- ✅ URLs presignadas para subida directa de imágenes
 
 ## Estructura de Productos
 
@@ -94,6 +96,40 @@ Cada producto contiene:
 - **URL**: `DELETE /productos/eliminar/{codigo}`
 - **Headers**: `Authorization: Bearer <token>`
 
+### 6. Subir Imagen
+- **URL**: `POST /productos/subir-imagen`
+- **Headers**: `Authorization: Bearer <token>`
+- **Body**:
+```json
+{
+  "imagen": "base64_encoded_image",
+  "codigo_producto": "MED-ABC123"
+}
+```
+- **Respuesta**:
+```json
+{
+  "message": "Imagen subida exitosamente",
+  "imagen_url": "https://s3.amazonaws.com/...",
+  "key": "productos/tenant/codigo/timestamp.ext"
+}
+```
+
+### 7. Generar URL de Subida
+- **URL**: `GET /productos/generar-url-subida`
+- **Headers**: `Authorization: Bearer <token>`
+- **Query Parameters**:
+  - `codigo_producto`: Código del producto
+  - `tipo_archivo`: Tipo de archivo (jpg, jpeg, png, gif, webp)
+- **Respuesta**:
+```json
+{
+  "upload_url": "https://s3.amazonaws.com/...",
+  "public_url": "https://s3.amazonaws.com/...",
+  "expires_in": 600
+}
+```
+
 ## Instalación y Despliegue
 
 ### Prerrequisitos
@@ -101,6 +137,13 @@ Cada producto contiene:
 - AWS CLI configurado
 - Serverless Framework
 - Token JWT válido del microservicio de usuarios
+- Bucket S3 configurado para almacenamiento de imágenes
+
+### Variables de Entorno
+
+- `TABLE_NAME`: Nombre de la tabla DynamoDB (auto-generado por stage)
+- `JWT_SECRET`: Secreto para validar tokens JWT
+- `BUCKET_NAME`: Nombre del bucket S3 para imágenes
 
 ### Comandos de Despliegue
 
@@ -126,6 +169,8 @@ npm run logs-listar
 npm run logs-buscar
 npm run logs-modificar
 npm run logs-eliminar
+npm run logs-subir-imagen
+npm run logs-generar-url
 ```
 
 ## Estructura del Proyecto
@@ -137,11 +182,6 @@ api-productos/
 ├── package.json        # Configuración del proyecto
 └── README.md           # Documentación
 ```
-
-## Variables de Entorno
-
-- `TABLE_NAME`: Nombre de la tabla DynamoDB (auto-generado por stage)
-- `JWT_SECRET`: Secreto para validar tokens JWT (debe coincidir con el microservicio de usuarios)
 
 ## Tabla DynamoDB
 
@@ -163,6 +203,24 @@ api-productos/
 - `fecha_modificacion`: Timestamp de última modificación
 - `activo`: Estado del producto (Boolean)
 
+## Manejo de Imágenes
+
+### Formatos Soportados
+- JPG/JPEG
+- PNG
+- GIF
+- WEBP
+
+### Límites
+- Tamaño máximo: 5MB
+- Tipos MIME soportados: image/jpeg, image/png, image/gif, image/webp
+
+### Estructura de Almacenamiento
+Las imágenes se almacenan en S3 con la siguiente estructura:
+```
+s3://{bucket_name}/productos/{tenant_id}/{codigo_producto}/{timestamp}.{extension}
+```
+
 ## Seguridad
 
 - Todos los endpoints requieren token JWT válido
@@ -170,82 +228,8 @@ api-productos/
 - Validación de tipos de datos y campos requeridos
 - CORS habilitado para frontend
 - Multi-tenancy para aislamiento de datos
-
-## Códigos de Productos
-
-Los códigos se generan automáticamente con el formato:
-`MED-{timestamp_base36}-{random}`
-
-Ejemplo: `MED-LX9M2K-A7B9C1`
-
-## Testing
-
-### Obtener Token (desde microservicio usuarios)
-```bash
-curl -X POST https://api-usuarios-url/usuarios/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "inkafarma",
-    "email": "admin@inkafarma.com",
-    "password": "password123"
-  }'
-```
-
-### Crear Producto
-```bash
-curl -X POST https://api-productos-url/productos/crear \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <tu-token>" \
-  -d '{
-    "nombre": "Ibuprofeno 400mg",
-    "precio": 18.90,
-    "descripcion": "Antiinflamatorio no esteroideo",
-    "imagen_url": "https://s3.amazonaws.com/inkafarma/ibuprofeno.jpg"
-  }'
-```
-
-### Listar Productos
-```bash
-curl -X GET "https://api-productos-url/productos/listar?limit=10" \
-  -H "Authorization: Bearer <tu-token>"
-```
-
-### Buscar Producto
-```bash
-curl -X GET https://api-productos-url/productos/buscar/MED-ABC123 \
-  -H "Authorization: Bearer <tu-token>"
-```
-
-### Modificar Producto
-```bash
-curl -X PUT https://api-productos-url/productos/modificar/MED-ABC123 \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <tu-token>" \
-  -d '{
-    "precio": 20.50,
-    "descripcion": "Nueva descripción actualizada"
-  }'
-```
-
-### Eliminar Producto
-```bash
-curl -X DELETE https://api-productos-url/productos/eliminar/MED-ABC123 \
-  -H "Authorization: Bearer <tu-token>"
-```
-
-## Integración con DynamoDB Streams
-
-La tabla tiene habilitado DynamoDB Streams para capturar cambios en tiempo real. Esto permitirá:
-- Actualizar índices de búsqueda en ElasticSearch
-- Generar eventos para otros microservicios
-- Auditoría de cambios
-
-## Paginación
-
-El endpoint de listado soporta paginación:
-- `limit`: Número de items por página
-- `lastKey`: Clave codificada en base64 para continuar desde donde se quedó
-- `hasMore`: Indica si hay más resultados disponibles
+- Validación de tipos de archivo y tamaño para imágenes
+- URLs presignadas con expiración para subida directa
 
 ## Códigos de Estado HTTP
 
