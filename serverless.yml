@@ -63,6 +63,10 @@ functions:
           method: get
           cors: true
           integration: lambda
+          request:
+            parameters:
+              paths:
+                codigo: true
 
   modificar-producto:
     handler: productos.modificarProducto
