@@ -1,5 +1,5 @@
 import { DynamoDB, S3 } from 'aws-sdk';
-import { verify } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 
 // Clientes AWS
 const dynamodb = new DynamoDB.DocumentClient();
@@ -47,7 +47,7 @@ const validarToken = (event) => {
             return { valid: false, error: 'Token requerido' };
         }
         
-        const payload = verify(token, jwtSecret);
+        const payload = jwt.verify(token, jwtSecret);
         return { valid: true, usuario: payload };
         
     } catch (error) {
