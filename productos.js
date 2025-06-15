@@ -331,6 +331,7 @@ export async function listarProductos(event, context) {
 
 // Crear producto (puede incluir imagen)
 export async function crearProducto(event, context) {
+    console.log('EVENTO RECIBIDO:', JSON.stringify(event));
     try {
         // Validar token
         const tokenValidation = validarToken(event);
