@@ -342,10 +342,14 @@ export async function crearProducto(event, context) {
         const tenantId = tokenValidation.usuario.tenant_id;
         
         let body;
-        try {
-            body = JSON.parse(event.body);
-        } catch (e) {
-            return lambdaResponse(400, { error: 'JSON inválido' });
+        if (typeof event.body === 'string') {
+            try {
+                body = JSON.parse(event.body);
+            } catch (e) {
+                return lambdaResponse(400, { error: 'JSON inválido' });
+            }
+        } else {
+            body = event.body;
         }
         
         // Validar campos requeridos
