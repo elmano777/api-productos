@@ -1,36 +1,38 @@
 {
-    "name": "api-productos-medicinas",
-    "version": "1.0.0",
-    "description": "API de productos para medicinas - Multi-tenant Serverless",
-    "main": "main.js",
-    "scripts": {
-      "deploy-dev": "serverless deploy --stage dev",
-      "deploy-test": "serverless deploy --stage test", 
-      "deploy-prod": "serverless deploy --stage prod",
-      "remove-dev": "serverless remove --stage dev",
-      "remove-test": "serverless remove --stage test",
-      "remove-prod": "serverless remove --stage prod",
-      "info": "serverless info",
-      "logs": "serverless logs -f",
-      "offline": "serverless offline"
-    },
-    "dependencies": {
-      "aws-sdk": "^2.1691.0",
-      "jsonwebtoken": "^9.0.2"
-    },
-    "devDependencies": {
-      "serverless": "^3.38.0",
-      "serverless-offline": "^13.8.0"
-    },
-    "keywords": [
-      "aws",
-      "lambda",
-      "serverless",
-      "dynamodb",
-      "medicinas",
-      "productos",
-      "multi-tenant"
-    ],
-    "author": "Rolando Diaz",
-    "license": "MIT"
-  }
+  "name": "api-productos-inkafarma",
+  "version": "1.0.0",
+  "description": "API de productos para Inkafarma - Multi-tenant Serverless",
+  "main": "productos.js",
+  "scripts": {
+    "deploy-dev": "serverless deploy --stage dev",
+    "deploy-test": "serverless deploy --stage test",
+    "deploy-prod": "serverless deploy --stage prod",
+    "remove-dev": "serverless remove --stage dev",
+    "remove-test": "serverless remove --stage test",
+    "remove-prod": "serverless remove --stage prod",
+    "info": "serverless info",
+    "logs-listar": "serverless logs -f listar-productos -t",
+    "logs-crear": "serverless logs -f crear-producto -t",
+    "logs-buscar": "serverless logs -f buscar-producto -t",
+    "logs-modificar": "serverless logs -f modificar-producto -t",
+    "logs-eliminar": "serverless logs -f eliminar-producto -t"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1691.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "serverless",
+    "dynamodb",
+    "productos",
+    "inkafarma",
+    "multi-tenant"
+  ],
+  "author": "Rolando Diaz",
+  "license": "MIT"
+}

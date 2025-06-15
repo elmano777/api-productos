@@ -1,15 +1,11 @@
 org: rolandodiaz
 service: api-productos
 
-plugins:
-  - serverless-offline
-
 provider:
   name: aws
   runtime: nodejs18.x
   memorySize: 1024
   timeout: 30
-  region: us-east-1
   iam:
     role: arn:aws:iam::409362080365:role/LabRole
   environment:
@@ -18,46 +14,46 @@ provider:
 
 functions:
   listar-productos:
-    handler: main.listarProductos
+    handler: productos.listarProductos
     events:
       - http:
-          path: /productos
+          path: /productos/listar
           method: get
           cors: true
           integration: lambda
-  
+
   crear-producto:
-    handler: main.crearProducto
+    handler: productos.crearProducto
     events:
       - http:
-          path: /productos
+          path: /productos/crear
           method: post
           cors: true
           integration: lambda
-  
+
   buscar-producto:
-    handler: main.buscarProducto
+    handler: productos.buscarProducto
     events:
       - http:
-          path: /productos/{codigo}
+          path: /productos/buscar/{codigo}
           method: get
           cors: true
           integration: lambda
-  
+
   modificar-producto:
-    handler: main.modificarProducto
+    handler: productos.modificarProducto
     events:
       - http:
-          path: /productos/{codigo}
+          path: /productos/modificar/{codigo}
           method: put
           cors: true
           integration: lambda
-  
+
   eliminar-producto:
-    handler: main.eliminarProducto
+    handler: productos.eliminarProducto
     events:
       - http:
-          path: /productos/{codigo}
+          path: /productos/eliminar/{codigo}
           method: delete
           cors: true
           integration: lambda
@@ -81,10 +77,3 @@ resources:
         BillingMode: PAY_PER_REQUEST
         StreamSpecification:
           StreamViewType: NEW_AND_OLD_IMAGES
-        GlobalSecondaryIndexes:
-          - IndexName: tenant_id-index
-            KeySchema:
-              - AttributeName: tenant_id
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
