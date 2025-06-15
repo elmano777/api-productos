@@ -73,34 +73,51 @@ const generarNombreArchivo = (tenantId, codigo, extension) => {
     return `productos/${tenantId}/${codigo}/${timestamp}.${extension}`;
 };
 
-// Função para detectar tipo de archivo por su contenido
-const detectarTipoImagen = (base64String) => {
-    if (base64String.startsWith('/9j/')) return { ext: 'jpg', mime: 'image/jpeg' };
-    if (base64String.startsWith('iVBORw0KGgo')) return { ext: 'png', mime: 'image/png' };
-    if (base64String.startsWith('R0lGODlh')) return { ext: 'gif', mime: 'image/gif' };
-    if (base64String.startsWith('UklGR')) return { ext: 'webp', mime: 'image/webp' };
-    return null;
-};
-
 // Función para procesar form-data
 const procesarFormData = (body) => {
-    const boundary = body.split('\r\n')[0];
-    const parts = body.split(boundary);
-    const result = {};
-    
-    for (const part of parts) {
-        if (part.includes('Content-Disposition: form-data')) {
-            const nameMatch = part.match(/name="([^"]+)"/);
-            if (nameMatch) {
-                const name = nameMatch[1];
-                const value = part.split('\r\n\r\n')[1]?.split('\r\n')[0];
-                if (value) {
-                    result[name] = value;
+    try {
+        const boundary = body.split('\r\n')[0];
+        const parts = body.split(boundary);
+        const result = {};
+        
+        for (const part of parts) {
+            if (part.includes('Content-Disposition: form-data')) {
+                const nameMatch = part.match(/name="([^"]+)"/);
+                if (nameMatch) {
+                    const name = nameMatch[1];
+                    // Extraer el contenido después de los headers
+                    const contentMatch = part.match(/\r\n\r\n([\s\S]*?)(?=\r\n--)/);
+                    if (contentMatch) {
+                        let value = contentMatch[1];
+                        // Si es un archivo, mantener el contenido binario
+                        if (part.includes('filename=')) {
+                            result[name] = value;
+                        } else {
+                            // Si no es un archivo, trimear el valor
+                            value = value.trim();
+                            result[name] = value;
+                        }
+                    }
                 }
             }
         }
+        return result;
+    } catch (error) {
+        console.error('Error procesando form-data:', error);
+        throw new Error('Error procesando form-data');
     }
-    return result;
+};
+
+// Función para detectar tipo de archivo por su contenido
+const detectarTipoImagen = (base64String) => {
+    // Limpiar el string base64 de posibles headers
+    const cleanBase64 = base64String.replace(/^data:image\/\w+;base64,/, '');
+    
+    if (cleanBase64.startsWith('/9j/')) return { ext: 'jpg', mime: 'image/jpeg' };
+    if (cleanBase64.startsWith('iVBORw0KGgo')) return { ext: 'png', mime: 'image/png' };
+    if (cleanBase64.startsWith('R0lGODlh')) return { ext: 'gif', mime: 'image/gif' };
+    if (cleanBase64.startsWith('UklGR')) return { ext: 'webp', mime: 'image/webp' };
+    return null;
 };
 
 // Subir imagen a S3
