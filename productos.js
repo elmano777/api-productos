@@ -1,9 +1,12 @@
-import { DynamoDB, S3 } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import jwt from 'jsonwebtoken';
 
 // Clientes AWS
-const dynamodb = new DynamoDB.DocumentClient();
-const s3 = new S3();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
+const s3 = new S3Client({});
 const tableName = process.env.TABLE_NAME;
 const bucketName = process.env.BUCKET_NAME;
 const jwtSecret = process.env.JWT_SECRET;
@@ -208,7 +211,7 @@ export async function subirImagen(event, context) {
             ACL: 'public-read' // Para que sea accesible públicamente
         };
         
-        const uploadResult = await s3.upload(uploadParams).promise();
+        const uploadResult = await s3.send(new PutObjectCommand(uploadParams));
         
         return lambdaResponse(200, {
             message: 'Imagen subida exitosamente',
@@ -306,7 +309,7 @@ export async function listarProductos(event, context) {
             params.ExclusiveStartKey = lastEvaluatedKey;
         }
         
-        const result = await dynamodb.query(params).promise();
+        const result = await dynamodb.send(new QueryCommand(params));
         
         let nextKey = null;
         if (result.LastEvaluatedKey) {
@@ -377,8 +380,8 @@ export async function crearProducto(event, context) {
                     ACL: 'public-read'
                 };
                 
-                const uploadResult = await s3.upload(uploadParams).promise();
-                imagenUrl = uploadResult.Location;
+                await s3.send(new PutObjectCommand(uploadParams));
+                imagenUrl = `https://${bucketName}.s3.amazonaws.com/${nombreArchivo}`;
                 
             } catch (error) {
                 return lambdaResponse(400, { error: error.message });
@@ -405,7 +408,7 @@ export async function crearProducto(event, context) {
             Item: producto
         };
         
-        await dynamodb.put(params).promise();
+        await dynamodb.send(new PutCommand(params));
         
         return lambdaResponse(201, {
             message: 'Producto creado exitosamente',
@@ -442,7 +445,7 @@ export async function buscarProducto(event, context) {
             }
         };
         
-        const result = await dynamodb.get(params).promise();
+        const result = await dynamodb.send(new GetCommand(params));
         
         if (!result.Item) {
             return lambdaResponse(404, { error: 'Producto no encontrado' });
@@ -490,7 +493,7 @@ export async function modificarProducto(event, context) {
             }
         };
         
-        const existingProduct = await dynamodb.get(getParams).promise();
+        const existingProduct = await dynamodb.send(new GetCommand(getParams));
         if (!existingProduct.Item) {
             return lambdaResponse(404, { error: 'Producto no encontrado' });
         }
@@ -523,7 +526,7 @@ export async function modificarProducto(event, context) {
                     try {
                         const oldImageKey = existingProduct.Item.imagen_url.split('.com/')[1]; // Extraer key de la URL
                         if (oldImageKey && oldImageKey.startsWith('productos/')) {
-                            await s3.deleteObject({ Bucket: bucketName, Key: oldImageKey }).promise();
+                            await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: oldImageKey }));
                         }
                     } catch (deleteError) {
                         console.warn('No se pudo eliminar imagen anterior:', deleteError);
@@ -540,10 +543,10 @@ export async function modificarProducto(event, context) {
                     ACL: 'public-read'
                 };
                 
-                const uploadResult = await s3.upload(uploadParams).promise();
+                await s3.send(new PutObjectCommand(uploadParams));
                 
                 updateExpression += `, imagen_url = :imagen_url`;
-                expressionAttributeValues[':imagen_url'] = uploadResult.Location;
+                expressionAttributeValues[':imagen_url'] = `https://${bucketName}.s3.amazonaws.com/${nombreArchivo}`;
                 
             } catch (uploadError) {
                 console.error('Error subiendo nueva imagen:', uploadError);
@@ -594,7 +597,7 @@ export async function modificarProducto(event, context) {
             updateParams.ExpressionAttributeNames = expressionAttributeNames;
         }
         
-        const result = await dynamodb.update(updateParams).promise();
+        const result = await dynamodb.send(new UpdateCommand(updateParams));
         
         return lambdaResponse(200, {
             message: 'Producto modificado exitosamente',
@@ -632,7 +635,7 @@ export async function eliminarProducto(event, context) {
             }
         };
         
-        const existingProduct = await dynamodb.get(getParams).promise();
+        const existingProduct = await dynamodb.send(new GetCommand(getParams));
         if (!existingProduct.Item) {
             return lambdaResponse(404, { error: 'Producto no encontrado' });
         }
@@ -642,7 +645,7 @@ export async function eliminarProducto(event, context) {
             try {
                 const imageKey = existingProduct.Item.imagen_url.split('.com/')[1]; // Extraer key de la URL
                 if (imageKey && imageKey.startsWith('productos/')) {
-                    await s3.deleteObject({ Bucket: bucketName, Key: imageKey }).promise();
+                    await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: imageKey }));
                 }
             } catch (deleteError) {
                 console.warn('No se pudo eliminar imagen:', deleteError);
@@ -659,7 +662,7 @@ export async function eliminarProducto(event, context) {
             ReturnValues: 'ALL_OLD'
         };
         
-        const result = await dynamodb.delete(deleteParams).promise();
+        const result = await dynamodb.send(new DeleteCommand(deleteParams));
         
         return lambdaResponse(200, {
             message: 'Producto eliminado exitosamente',

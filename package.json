@@ -19,7 +19,9 @@
     "logs-eliminar": "serverless logs -f eliminar-producto -t"
   },
   "dependencies": {
-    "aws-sdk": "^2.1691.0",
+    "@aws-sdk/client-dynamodb": "^3.511.0",
+    "@aws-sdk/lib-dynamodb": "^3.511.0",
+    "@aws-sdk/client-s3": "^3.511.0",
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
