@@ -442,17 +442,22 @@ export async function buscarProducto(event, context) {
         // Múltiples formas de obtener el código
         let codigo = null;
         
-        // Opción 1: Desde pathParameters
-        if (event.pathParameters && event.pathParameters.codigo) {
+        // Opción 1: Desde path (tu estructura actual)
+        if (event.path && event.path.codigo) {
+            codigo = event.path.codigo;
+        }
+        
+        // Opción 2: Desde pathParameters (estructura estándar de API Gateway)
+        if (!codigo && event.pathParameters && event.pathParameters.codigo) {
             codigo = event.pathParameters.codigo;
         }
         
-        // Opción 2: Desde pathParameters sin optional chaining (fallback)
-        if (!codigo && event.pathParameters) {
-            codigo = event.pathParameters.codigo;
+        // Opción 3: Desde queryStringParameters (fallback)
+        if (!codigo && event.queryStringParameters && event.queryStringParameters.codigo) {
+            codigo = event.queryStringParameters.codigo;
         }
         
-        // Opción 3: Desde resource path parsing (backup)
+        // Opción 4: Desde resource path parsing (backup)
         if (!codigo && event.resource) {
             const matches = event.resource.match(/\/productos\/buscar\/([^\/]+)/);
             if (matches && matches[1]) {
@@ -460,7 +465,15 @@ export async function buscarProducto(event, context) {
             }
         }
         
-        // Opción 4: Desde requestContext (otro fallback)
+        // Opción 5: Desde requestPath parsing (tu estructura actual)
+        if (!codigo && event.requestPath) {
+            const matches = event.requestPath.match(/\/productos\/buscar\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 6: Desde requestContext (otro fallback)
         if (!codigo && event.requestContext && event.requestContext.resourcePath) {
             const matches = event.requestContext.resourcePath.match(/\/productos\/buscar\/([^\/]+)/);
             if (matches && matches[1]) {
@@ -472,13 +485,17 @@ export async function buscarProducto(event, context) {
         
         if (!codigo) {
             console.log('PathParameters:', event.pathParameters);
+            console.log('Path:', event.path);
             console.log('Resource:', event.resource);
+            console.log('RequestPath:', event.requestPath);
             console.log('RequestContext:', event.requestContext);
             return lambdaResponse(400, { 
                 error: 'Código de producto requerido',
                 debug: {
                     pathParameters: event.pathParameters,
-                    resource: event.resource
+                    path: event.path,
+                    resource: event.resource,
+                    requestPath: event.requestPath
                 }
             });
         }
