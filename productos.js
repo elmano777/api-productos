@@ -597,10 +597,33 @@ export async function modificarProducto(event, context) {
         }
         
         let body;
+        console.log('Tipo de event.body:', typeof event.body);
+        console.log('Contenido de event.body:', event.body);
+        
         try {
-            body = JSON.parse(event.body);
+            if (typeof event.body === 'string') {
+                body = JSON.parse(event.body);
+            } else if (typeof event.body === 'object') {
+                body = event.body;
+            } else {
+                console.error('Tipo de body no soportado:', typeof event.body);
+                return lambdaResponse(400, { 
+                    error: 'Formato de body no soportado',
+                    debug: {
+                        bodyType: typeof event.body,
+                        bodyContent: event.body
+                    }
+                });
+            }
         } catch (e) {
-            return lambdaResponse(400, { error: 'JSON inválido' });
+            console.error('Error parseando JSON:', e);
+            return lambdaResponse(400, { 
+                error: 'JSON inválido',
+                debug: {
+                    error: e.message,
+                    bodyContent: event.body
+                }
+            });
         }
         
         // Verificar que el producto existe
