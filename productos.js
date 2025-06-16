@@ -536,10 +536,64 @@ export async function modificarProducto(event, context) {
         }
         
         const tenantId = tokenValidation.usuario.tenant_id;
-        const codigo = event.pathParameters?.codigo;
+        
+        // Múltiples formas de obtener el código
+        let codigo = null;
+        
+        // Opción 1: Desde path
+        if (event.path && event.path.codigo) {
+            codigo = event.path.codigo;
+        }
+        
+        // Opción 2: Desde pathParameters
+        if (!codigo && event.pathParameters && event.pathParameters.codigo) {
+            codigo = event.pathParameters.codigo;
+        }
+        
+        // Opción 3: Desde queryStringParameters
+        if (!codigo && event.queryStringParameters && event.queryStringParameters.codigo) {
+            codigo = event.queryStringParameters.codigo;
+        }
+        
+        // Opción 4: Desde resource path parsing
+        if (!codigo && event.resource) {
+            const matches = event.resource.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 5: Desde requestPath parsing
+        if (!codigo && event.requestPath) {
+            const matches = event.requestPath.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 6: Desde requestContext
+        if (!codigo && event.requestContext && event.requestContext.resourcePath) {
+            const matches = event.requestContext.resourcePath.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
         
         if (!codigo) {
-            return lambdaResponse(400, { error: 'Código de producto requerido' });
+            console.log('PathParameters:', event.pathParameters);
+            console.log('Path:', event.path);
+            console.log('Resource:', event.resource);
+            console.log('RequestPath:', event.requestPath);
+            console.log('RequestContext:', event.requestContext);
+            return lambdaResponse(400, { 
+                error: 'Código de producto requerido',
+                debug: {
+                    pathParameters: event.pathParameters,
+                    path: event.path,
+                    resource: event.resource,
+                    requestPath: event.requestPath
+                }
+            });
         }
         
         let body;
@@ -685,10 +739,64 @@ export async function eliminarProducto(event, context) {
         }
         
         const tenantId = tokenValidation.usuario.tenant_id;
-        const codigo = event.pathParameters?.codigo;
+        
+        // Múltiples formas de obtener el código
+        let codigo = null;
+        
+        // Opción 1: Desde path
+        if (event.path && event.path.codigo) {
+            codigo = event.path.codigo;
+        }
+        
+        // Opción 2: Desde pathParameters
+        if (!codigo && event.pathParameters && event.pathParameters.codigo) {
+            codigo = event.pathParameters.codigo;
+        }
+        
+        // Opción 3: Desde queryStringParameters
+        if (!codigo && event.queryStringParameters && event.queryStringParameters.codigo) {
+            codigo = event.queryStringParameters.codigo;
+        }
+        
+        // Opción 4: Desde resource path parsing
+        if (!codigo && event.resource) {
+            const matches = event.resource.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 5: Desde requestPath parsing
+        if (!codigo && event.requestPath) {
+            const matches = event.requestPath.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
+        
+        // Opción 6: Desde requestContext
+        if (!codigo && event.requestContext && event.requestContext.resourcePath) {
+            const matches = event.requestContext.resourcePath.match(/\/productos\/([^\/]+)/);
+            if (matches && matches[1]) {
+                codigo = matches[1];
+            }
+        }
         
         if (!codigo) {
-            return lambdaResponse(400, { error: 'Código de producto requerido' });
+            console.log('PathParameters:', event.pathParameters);
+            console.log('Path:', event.path);
+            console.log('Resource:', event.resource);
+            console.log('RequestPath:', event.requestPath);
+            console.log('RequestContext:', event.requestContext);
+            return lambdaResponse(400, { 
+                error: 'Código de producto requerido',
+                debug: {
+                    pathParameters: event.pathParameters,
+                    path: event.path,
+                    resource: event.resource,
+                    requestPath: event.requestPath
+                }
+            });
         }
         
         // Obtener producto antes de eliminar
