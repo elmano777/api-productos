@@ -273,16 +273,9 @@ export async function generarUrlSubida(event, context) {
     }
 }
 
-// Listar productos con paginación
+// Listar productos con paginación - SIN TOKEN
 export async function listarProductos(event, context) {
     try {
-        // Validar token
-        const tokenValidation = validarToken(event);
-        if (!tokenValidation.valid) {
-            return lambdaResponse(401, { error: tokenValidation.error });
-        }
-        
-        const tenantId = tokenValidation.usuario.tenant_id;
         const queryParams = event.queryStringParameters || {};
         const limit = parseInt(queryParams.limit) || 20;
         let lastEvaluatedKey = null;
@@ -294,6 +287,9 @@ export async function listarProductos(event, context) {
                 return lambdaResponse(400, { error: 'lastKey inválido' });
             }
         }
+        
+        // Usar un tenant_id por defecto o buscar en todos los productos
+        const tenantId = queryParams.tenant_id || 'inkafarma'; // Puedes cambiar 'default' por el tenant que necesites
         
         const params = {
             TableName: tableName,
@@ -426,19 +422,11 @@ export async function crearProducto(event, context) {
     }
 }
 
-// Buscar producto por código - VERSIÓN CORREGIDA
+// Buscar producto por código - SIN TOKEN
 export async function buscarProducto(event, context) {
     console.log('Evento completo:', JSON.stringify(event, null, 2)); // Debug
     
     try {
-        // Validar token
-        const tokenValidation = validarToken(event);
-        if (!tokenValidation.valid) {
-            return lambdaResponse(401, { error: tokenValidation.error });
-        }
-        
-        const tenantId = tokenValidation.usuario.tenant_id;
-        
         // Múltiples formas de obtener el código
         let codigo = null;
         
@@ -499,6 +487,10 @@ export async function buscarProducto(event, context) {
                 }
             });
         }
+        
+        // Usar un tenant_id por defecto o permitir búsqueda por tenant_id en query params
+        const queryParams = event.queryStringParameters || {};
+        const tenantId = queryParams.tenant_id || 'inkafarma'; // Puedes cambiar 'default' por el tenant que necesites
         
         const params = {
             TableName: tableName,
