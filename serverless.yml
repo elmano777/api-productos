@@ -1,9 +1,6 @@
 org: rolandodiaz
 service: api-productos
 
-plugins:
-  - serverless-esbuild
-
 provider:
   name: aws
   runtime: nodejs18.x
@@ -15,21 +12,6 @@ provider:
     TABLE_NAME: ${sls:stage}-t_productos
     BUCKET_NAME: ${sls:stage}-inkafarma-productos-imagenes
     JWT_SECRET: mi-super-secreto-jwt-2025
-
-custom:
-  esbuild:
-    bundle: true
-    minify: false
-    sourcemap: true
-    target: 'node18'
-    platform: 'node'
-    mainFields: ['module', 'main']
-    external:
-      - aws-sdk
-    packager: 'npm'
-    packagerOptions:
-      scripts:
-        - npm install --production
 
 functions:
   listar-productos:
